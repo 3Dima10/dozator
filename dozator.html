@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Дозатор — расчёт доз и рецепты</title>
+<style>
+  :root{
+    --paper:#FBFCFC;
+    --card:#FFFFFF;
+    --ink:#16202B;
+    --ink-soft:#5A6B76;
+    --rail:#0C2A2C;
+    --rail-soft:#8FB3AE;
+    --accent:#0F766E;
+    --accent-weak:#E4F1EE;
+    --signal:#9A5B0B;
+    --signal-weak:#FDF3E3;
+    --line:#DCE4E5;
+    --radius:10px;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Consolas","DejaVu Sans Mono",monospace;
+    --sans:"Inter","Segoe UI",system-ui,-apple-system,"Noto Sans",Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0F1719; --card:#16211F; --ink:#E8EFEE; --ink-soft:#9DB0AF;
+      --rail:#081A1B; --line:#25332F; --accent:#4FB3A4; --accent-weak:#12302C;
+      --signal:#E0A96D; --signal-weak:#2A2117;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0F1719; --card:#16211F; --ink:#E8EFEE; --ink-soft:#9DB0AF;
+    --rail:#081A1B; --line:#25332F; --accent:#4FB3A4; --accent-weak:#12302C;
+    --signal:#E0A96D; --signal-weak:#2A2117;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); font-size:15px; line-height:1.5;
+    display:flex; min-height:100vh;
+  }
+  /* ---------- Rail ---------- */
+  nav{
+    width:214px; flex:0 0 214px; background:var(--rail); color:#DCEAE7;
+    display:flex; flex-direction:column; padding:18px 0 10px;
+  }
+  .brand{padding:0 18px 18px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .brand h1{margin:0; font-size:19px; letter-spacing:.2px; font-weight:650; color:#fff}
+  .brand p{margin:2px 0 0; font-size:12px; color:var(--rail-soft)}
+  nav button{
+    all:unset; display:flex; gap:10px; align-items:center;
+    padding:10px 18px; font-size:14px; color:#C6DBD7; cursor:pointer;
+  }
+  nav button:hover{background:rgba(255,255,255,.06); color:#fff}
+  nav button[aria-current="true"]{background:rgba(255,255,255,.1); color:#fff; box-shadow:inset 3px 0 0 var(--accent)}
+  nav button:focus-visible{outline:2px solid #6FD3C4; outline-offset:-2px}
+  nav .idx{font-family:var(--mono); font-size:11px; color:var(--rail-soft); width:14px}
+  nav button[aria-current="true"] .idx{color:#6FD3C4}
+  .rail-foot{margin-top:auto; padding:12px 18px 0; font-size:11px; color:var(--rail-soft); border-top:1px solid rgba(255,255,255,.08)}
+  .rail-foot button{all:unset; cursor:pointer; color:var(--rail-soft); text-decoration:underline; font-size:11px; padding:6px 0}
+  /* ---------- Main ---------- */
+  main{flex:1; overflow-y:auto; padding:30px 34px 60px}
+  .wrap{max-width:780px}
+  h2{font-size:22px; margin:0 0 4px; font-weight:640}
+  .lede{color:var(--ink-soft); margin:0 0 22px; font-size:13.5px; max-width:62ch}
+  section[hidden]{display:none}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px 18px 20px; margin-bottom:16px}
+  .card h3{margin:0 0 14px; font-size:14px; font-weight:620; color:var(--ink)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px}
+  label{display:block; font-size:12.5px; color:var(--ink-soft); margin-bottom:4px}
+  input,select,textarea{
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:7px;
+    background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:14px;
+  }
+  input[type=number],input.num{font-family:var(--mono)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:transparent}
+  textarea{resize:vertical; min-height:64px; line-height:1.45}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  /* ---------- Readout ---------- */
+  .readout{background:var(--rail); border-radius:var(--radius); padding:16px 18px; color:#DCEAE7; margin-bottom:16px}
+  .readout .big{font-family:var(--mono); font-size:30px; color:#fff; line-height:1.2; letter-spacing:-.5px}
+  .readout .big small{font-size:15px; color:var(--rail-soft); margin-left:4px; letter-spacing:0}
+  .readout .cap{font-size:12px; color:var(--rail-soft); margin-bottom:6px}
+  .readout .split{display:flex; flex-wrap:wrap; gap:26px 34px; margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.1)}
+  .readout .split div span{display:block; font-size:11.5px; color:var(--rail-soft)}
+  .readout .split div b{font-family:var(--mono); font-weight:500; font-size:17px; color:#fff}
+  .note{background:var(--signal-weak); border-left:3px solid var(--signal); color:var(--signal);
+        padding:10px 12px; border-radius:0 7px 7px 0; font-size:12.5px; margin-bottom:16px}
+  .hint{font-size:12px; color:var(--ink-soft); margin:8px 0 0}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{text-align:left; padding:7px 8px; border-bottom:1px solid var(--line)}
+  th{color:var(--ink-soft); font-weight:550; font-size:12px}
+  td.n{font-family:var(--mono)}
+  .btn{all:unset; cursor:pointer; background:var(--accent); color:#fff; padding:9px 16px;
+       border-radius:7px; font-size:13.5px; font-weight:550}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
+  .btn.ghost{background:transparent; color:var(--accent); border:1px solid var(--accent)}
+  .actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px}
+  .segment{display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden}
+  .segment button{all:unset; flex:1; text-align:center; padding:8px 4px; font-size:13px; cursor:pointer; color:var(--ink-soft)}
+  .segment button[aria-pressed="true"]{background:var(--accent-weak); color:var(--accent); font-weight:600}
+  pre.rx{
+    font-family:var(--mono); font-size:13.5px; line-height:1.65; white-space:pre-wrap;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; margin:0; color:var(--ink)
+  }
+  .bad{color:#B3261E}
+  @media (max-width:880px){
+    body{flex-direction:column}
+    nav{width:100%; flex:0 0 auto; flex-direction:row; overflow-x:auto; padding:0; align-items:center}
+    .brand{display:none}
+    nav button{white-space:nowrap; padding:14px}
+    nav button[aria-current="true"]{box-shadow:inset 0 -3px 0 var(--accent)}
+    .rail-foot{display:none}
+    main{padding:20px 16px 50px}
+  }
+  @media print{
+    nav,.no-print{display:none !important}
+    body{background:#fff; color:#000; display:block}
+    main{padding:0; overflow:visible}
+    pre.rx{border:none; padding:0; font-size:14px; color:#000; background:#fff}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">
+    <h1>Дозатор</h1>
+    <p>расчёты и рецепты</p>
+  </div>
+  <button data-go="conc" aria-current="true"><span class="idx">01</span>Концентрация</button>
+  <button data-go="dose"><span class="idx">02</span>Доза и объём</button>
+  <button data-go="iu"><span class="idx">03</span>Международные ед.</button>
+  <button data-go="dil"><span class="idx">04</span>Разведение</button>
+  <button data-go="inf"><span class="idx">05</span>Инфузия</button>
+  <button data-go="ped"><span class="idx">06</span>Дети и площадь тела</button>
+  <button data-go="rx"><span class="idx">07</span>Рецепт</button>
+  <div class="rail-foot">
+    <button id="themeBtn">Сменить тему</button><br>
+    Проверяйте расчёт перед назначением.
+  </div>
+</nav>
+
+<main><div class="wrap">
+
+<!-- ================= 01 КОНЦЕНТРАЦИЯ ================= -->
+<section id="conc">
+  <h2>Концентрация раствора</h2>
+  <p class="lede">Проценты, мг/мл и разведение вида 1:1000 — это одна и та же величина в разной записи. Введите любое поле, остальные пересчитаются.</p>
+
+  <div class="readout">
+    <div class="cap">Содержание действующего вещества</div>
+    <div class="big" id="cOut">10,0<small>мг/мл</small></div>
+    <div class="split">
+      <div><span>В процентах</span><b id="cPct">1 %</b></div>
+      <div><span>Соотношение</span><b id="cRatio">1:1000</b></div>
+      <div><span>В ампуле / флаконе</span><b id="cVial">20 мг</b></div>
+      <div><span>мкг/мл</span><b id="cMcg">10 000</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Ввод</h3>
+    <div class="grid">
+      <div><label for="cInPct">Процент, %</label><input id="cInPct" class="num" type="number" step="any" value="1"></div>
+      <div><label for="cInMg">мг/мл</label><input id="cInMg" class="num" type="number" step="any" value="10"></div>
+      <div><label for="cInRatio">1 : X</label><input id="cInRatio" class="num" type="number" step="any" value="1000"></div>
+      <div><label for="cInVol">Объём ампулы, мл</label><input id="cInVol" class="num" type="number" step="any" value="2"></div>
+    </div>
+    <p class="hint">Правило: 1 % = 10 мг/мл. Раствор 1:1000 = 1 мг/мл.</p>
+  </div>
+
+  <div class="card">
+    <h3>Частые формы выпуска</h3>
+    <table>
+      <tr><th>Препарат</th><th>Запись</th><th>мг/мл</th></tr>
+      <tr><td>Адреналин</td><td class="n">0,1 % (1:1000)</td><td class="n">1</td></tr>
+      <tr><td>Атропин</td><td class="n">0,1 %</td><td class="n">1</td></tr>
+      <tr><td>Лидокаин</td><td class="n">2 %</td><td class="n">20</td></tr>
+      <tr><td>Метамизол (анальгин)</td><td class="n">50 %</td><td class="n">500</td></tr>
+      <tr><td>Магния сульфат</td><td class="n">25 %</td><td class="n">250</td></tr>
+      <tr><td>Глюкоза</td><td class="n">40 %</td><td class="n">400</td></tr>
+      <tr><td>Натрия хлорид</td><td class="n">0,9 %</td><td class="n">9</td></tr>
+      <tr><td>Дексаметазон</td><td class="n">0,4 %</td><td class="n">4</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 02 ДОЗА ================= -->
+<section id="dose" hidden>
+  <h2>Доза и объём для введения</h2>
+  <p class="lede">Считает разовую и суточную дозу по массе тела и переводит её в миллилитры готового раствора.</p>
+
+  <div class="readout">
+    <div class="cap">Набрать в шприц</div>
+    <div class="big" id="dVol">1,4<small>мл</small></div>
+    <div class="split">
+      <div><span>Разовая доза</span><b id="dSingle">700 мг</b></div>
+      <div><span>Суточная доза</span><b id="dDaily">2100 мг</b></div>
+      <div><span>Ампул на приём</span><b id="dAmp">0,7</b></div>
+      <div><span>Ампул в сутки</span><b id="dAmpD">2,1</b></div>
+    </div>
+  </div>
+  <div class="note" id="dWarn" hidden></div>
+
+  <div class="card">
+    <h3>Пациент и назначение</h3>
+    <div class="grid">
+      <div><label for="dW">Масса тела, кг</label><input id="dW" class="num" type="number" step="any" value="70"></div>
+      <div><label for="dVal">Доза</label><input id="dVal" class="num" type="number" step="any" value="10"></div>
+      <div><label for="dUnit">Единица дозы</label>
+        <select id="dUnit">
+          <option value="mgkg">мг/кг на приём</option>
+          <option value="mcgkg">мкг/кг на приём</option>
+          <option value="mg">мг на приём (фикс.)</option>
+          <option value="mcg">мкг на приём (фикс.)</option>
+          <option value="mgkgday">мг/кг в сутки</option>
+        </select>
+      </div>
+      <div><label for="dFreq">Приёмов в сутки</label><input id="dFreq" class="num" type="number" step="1" value="3"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Раствор</h3>
+    <div class="grid">
+      <div><label for="dConcMode">Задать концентрацию</label>
+        <select id="dConcMode"><option value="mg">в мг/мл</option><option value="pct">в процентах</option></select>
+      </div>
+      <div><label for="dConc">Значение</label><input id="dConc" class="num" type="number" step="any" value="500"></div>
+      <div><label for="dAmpVol">Объём ампулы, мл</label><input id="dAmpVol" class="num" type="number" step="any" value="2"></div>
+      <div><label for="dMax">Максимум в сутки, мг <span style="opacity:.6">(не обяз.)</span></label><input id="dMax" class="num" type="number" step="any" placeholder="напр. 4000"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 МЕ ================= -->
+<section id="iu" hidden>
+  <h2>Международные единицы</h2>
+  <p class="lede">МЕ — мера биологической активности, а не массы, поэтому коэффициент перевода свой у каждого вещества.</p>
+
+  <div class="card">
+    <h3>Доза по концентрации флакона</h3>
+    <div class="grid">
+      <div><label for="uPreset">Препарат</label>
+        <select id="uPreset">
+          <option value="100">Инсулин U-100 — 100 МЕ/мл</option>
+          <option value="40">Инсулин U-40 — 40 МЕ/мл</option>
+          <option value="5000">Гепарин 5000 МЕ/мл</option>
+          <option value="25000">Гепарин 25 000 МЕ/мл</option>
+          <option value="5">Окситоцин 5 МЕ/мл</option>
+          <option value="custom">Своё значение</option>
+        </select>
+      </div>
+      <div><label for="uConc">Концентрация, МЕ/мл</label><input id="uConc" class="num" type="number" step="any" value="100"></div>
+      <div><label for="uDose">Назначено, МЕ</label><input id="uDose" class="num" type="number" step="any" value="24"></div>
+    </div>
+    <div class="readout" style="margin:16px 0 0">
+      <div class="cap">Набрать в шприц</div>
+      <div class="big" id="uVol">0,24<small>мл</small></div>
+      <div class="split">
+        <div><span>Делений инсулинового шприца U-100</span><b id="uTicks">24</b></div>
+        <div><span>В 1 мл</span><b id="uPerMl">100 МЕ</b></div>
+      </div>
+    </div>
+    <p class="hint">Инсулиновым шприцем U-100 набирают препарат только с маркировкой U-100. Шприц U-40 к флакону U-100 не подходит.</p>
+  </div>
+
+  <div class="card">
+    <h3>МЕ ↔ масса</h3>
+    <div class="grid">
+      <div><label for="mPreset">Вещество</label>
+        <select id="mPreset">
+          <option value="0.025">Витамин D₃ (холекальциферол)</option>
+          <option value="0.3">Витамин A — ретинол</option>
+          <option value="0.344">Витамин A — ретинола ацетат</option>
+          <option value="0.55">Витамин A — ретинола пальмитат</option>
+          <option value="667">Витамин E — d-α-токоферол</option>
+          <option value="1000">Витамин E — dl-α-токоферола ацетат</option>
+          <option value="0.6">Бензилпенициллина натриевая соль</option>
+          <option value="customM">Своё значение</option>
+        </select>
+      </div>
+      <div><label for="mIU">МЕ</label><input id="mIU" class="num" type="number" step="any" value="2000"></div>
+      <div><label for="mMass">мкг</label><input id="mMass" class="num" type="number" step="any" value="50"></div>
+      <div><label for="mFactor">мкг в 1 МЕ</label><input id="mFactor" class="num" type="number" step="any" value="0.025"></div>
+    </div>
+    <p class="hint" id="mEcho">В 1 мг содержится 40 000 МЕ.</p>
+  </div>
+</section>
+
+<!-- ================= 04 РАЗВЕДЕНИЕ ================= -->
+<section id="dil" hidden>
+  <h2>Разведение</h2>
+  <p class="lede">Закон сохранения вещества: C₁·V₁ = C₂·V₂. Оставьте пустым то поле, которое нужно найти.</p>
+
+  <div class="readout">
+    <div class="cap">Результат</div>
+    <div class="big" id="dilOut">—</div>
+    <div class="split">
+      <div><span>Взять концентрата</span><b id="dilTake">—</b></div>
+      <div><span>Добавить растворителя</span><b id="dilSolv">—</b></div>
+      <div><span>Итоговый объём</span><b id="dilTotal">—</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Исходный раствор</h3>
+    <div class="row2">
+      <div><label for="c1">Концентрация C₁</label><input id="c1" class="num" type="number" step="any" value="500"></div>
+      <div><label for="v1">Объём V₁, мл</label><input id="v1" class="num" type="number" step="any" placeholder="искомое"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Нужно получить</h3>
+    <div class="row2">
+      <div><label for="c2">Концентрация C₂</label><input id="c2" class="num" type="number" step="any" value="50"></div>
+      <div><label for="v2">Объём V₂, мл</label><input id="v2" class="num" type="number" step="any" value="10"></div>
+    </div>
+    <p class="hint">Единицы C₁ и C₂ должны совпадать: либо обе в мг/мл, либо обе в процентах, либо обе в МЕ/мл.</p>
+  </div>
+</section>
+
+<!-- ================= 05 ИНФУЗИЯ ================= -->
+<section id="inf" hidden>
+  <h2>Инфузия</h2>
+  <p class="lede">Скорость помпы, капли в минуту и время до окончания флакона.</p>
+
+  <div class="card">
+    <h3>Дозирование по массе</h3>
+    <div class="grid">
+      <div><label for="iW">Масса, кг</label><input id="iW" class="num" type="number" step="any" value="70"></div>
+      <div><label for="iDose">Доза</label><input id="iDose" class="num" type="number" step="any" value="5"></div>
+      <div><label for="iDoseUnit">Единица</label>
+        <select id="iDoseUnit">
+          <option value="mcgkgmin">мкг/кг/мин</option>
+          <option value="mcgkgh">мкг/кг/ч</option>
+          <option value="mgkgh">мг/кг/ч</option>
+        </select>
+      </div>
+      <div><label for="iConc">Концентрация в шприце, мг/мл</label><input id="iConc" class="num" type="number" step="any" value="2"></div>
+    </div>
+    <div class="readout" style="margin:16px 0 0">
+      <div class="cap">Скорость инфузии</div>
+      <div class="big" id="iRate">10,5<small>мл/ч</small></div>
+      <div class="split">
+        <div><span>В минуту</span><b id="iMin">0,18 мл</b></div>
+        <div><span>Вещества в час</span><b id="iMgh">21 мг</b></div>
+        <div><span>Вещества в сутки</span><b id="iMgd">504 мг</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Капельница</h3>
+    <div class="grid">
+      <div><label for="gVol">Объём, мл</label><input id="gVol" class="num" type="number" step="any" value="400"></div>
+      <div><label for="gTime">Время, мин</label><input id="gTime" class="num" type="number" step="any" value="120"></div>
+      <div><label for="gFactor">Капель в 1 мл</label>
+        <select id="gFactor">
+          <option value="20">20 — стандартная система</option>
+          <option value="15">15 — система для крови</option>
+          <option value="60">60 — микрокапельница</option>
+        </select>
+      </div>
+    </div>
+    <div class="readout" style="margin:16px 0 0">
+      <div class="cap">Настроить зажим</div>
+      <div class="big" id="gDrops">67<small>кап/мин</small></div>
+      <div class="split">
+        <div><span>Скорость</span><b id="gRate">200 мл/ч</b></div>
+        <div><span>Капля каждые</span><b id="gEvery">0,9 с</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06 ДЕТИ ================= -->
+<section id="ped" hidden>
+  <h2>Дети и площадь поверхности тела</h2>
+  <p class="lede">Площадь тела по формуле Мостеллера, поддерживающая потребность в жидкости по правилу 4-2-1 и суточный объём по Холлидею — Сегару.</p>
+
+  <div class="card">
+    <h3>Данные</h3>
+    <div class="row2">
+      <div><label for="pW">Масса, кг</label><input id="pW" class="num" type="number" step="any" value="18"></div>
+      <div><label for="pH">Рост, см</label><input id="pH" class="num" type="number" step="any" value="108"></div>
+    </div>
+  </div>
+
+  <div class="readout">
+    <div class="cap">Площадь поверхности тела</div>
+    <div class="big" id="pBsa">0,78<small>м²</small></div>
+    <div class="split">
+      <div><span>Поддерживающая инфузия</span><b id="pRate">56 мл/ч</b></div>
+      <div><span>Объём за сутки</span><b id="pDay">1340 мл</b></div>
+      <div><span>ИМТ</span><b id="pBmi">15,4</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Доза по площади тела</h3>
+    <div class="row2">
+      <div><label for="pDose">Доза, мг/м²</label><input id="pDose" class="num" type="number" step="any" value="100"></div>
+      <div><label for="pConc">Концентрация, мг/мл</label><input id="pConc" class="num" type="number" step="any" value="10"></div>
+    </div>
+    <p class="hint" id="pOut">Разовая доза: 78 мг — это 7,8 мл.</p>
+  </div>
+</section>
+
+<!-- ================= 07 РЕЦЕПТ ================= -->
+<section id="rx" hidden>
+  <h2>Рецепт</h2>
+  <p class="lede">Заполните поля — пропись на латыни соберётся сама. Готовый бланк можно скопировать или распечатать.</p>
+
+  <div class="card no-print">
+    <h3>Пациент</h3>
+    <div class="grid">
+      <div><label for="rName">Фамилия, инициалы</label><input id="rName" value="Иванов И. И."></div>
+      <div><label for="rAge">Возраст</label><input id="rAge" value="45 лет"></div>
+      <div><label for="rDate">Дата</label><input id="rDate" type="date"></div>
+      <div><label for="rDoc">Врач</label><input id="rDoc" value="Петренко О. В."></div>
+    </div>
+    <div style="margin-top:12px"><label for="rDx">Диагноз</label><input id="rDx" placeholder="необязательно"></div>
+  </div>
+
+  <div class="card no-print">
+    <h3>Пропись</h3>
+    <div class="grid">
+      <div><label for="rForm">Лекарственная форма</label>
+        <select id="rForm">
+          <option value="sol">Раствор в ампулах — Sol.</option>
+          <option value="tab">Таблетки — Tab.</option>
+          <option value="caps">Капсулы — Caps.</option>
+          <option value="susp">Суспензия — Susp.</option>
+          <option value="ung">Мазь — Ung.</option>
+          <option value="supp">Свечи — Supp.</option>
+          <option value="inf">Флакон для инфузии — Sol. in flac.</option>
+        </select>
+      </div>
+      <div><label for="rDrug">Название на латыни (род. падеж)</label><input id="rDrug" value="Analgini"></div>
+      <div><label for="rStrength">Дозировка / концентрация</label><input id="rStrength" value="50%"></div>
+      <div><label for="rVol">Объём или масса</label><input id="rVol" value="2 ml"></div>
+      <div><label for="rN">Количество, N</label><input id="rN" class="num" type="number" step="1" value="10"></div>
+      <div><label for="rRepeat">Повторение</label>
+        <select id="rRepeat">
+          <option value="">без отметки</option>
+          <option value="Non repetatur!">Non repetatur! — не повторять</option>
+          <option value="Repetatur bis!">Repetatur bis! — повторить дважды</option>
+          <option value="Cito!">Cito! — срочно</option>
+          <option value="Statim!">Statim! — немедленно</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <label for="rSig">Сигнатура для пациента</label>
+      <textarea id="rSig">По 2 мл внутримышечно 2 раза в день при болях</textarea>
+    </div>
+    <div class="actions">
+      <button class="btn" id="rxCopy">Скопировать рецепт</button>
+      <button class="btn ghost" id="rxPrint">Печать бланка</button>
+      <button class="btn ghost" id="rxAdd">Добавить ещё пропись</button>
+      <span id="rxMsg" class="hint" style="align-self:center"></span>
+    </div>
+  </div>
+
+  <pre class="rx" id="rxOut"></pre>
+</section>
+
+</div></main>
+
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const val = id => parseFloat(String($(id).value).replace(",", "."));
+  const ok = n => Number.isFinite(n);
+
+  // Форматирование чисел в привычном для документации виде
+  function fmt(n, digits){
+    if(!Number.isFinite(n)) return "—";
+    let d = digits;
+    if(d === undefined){
+      const a = Math.abs(n);
+      d = a === 0 ? 0 : a < 0.1 ? 4 : a < 1 ? 3 : a < 10 ? 2 : a < 1000 ? 1 : 0;
+    }
+    let s = n.toFixed(d);
+    if(s.indexOf(".") !== -1) s = s.replace(/0+$/, "").replace(/\.$/, "");
+    const parts = s.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u202F");
+    return parts[1] ? parts[0] + "," + parts[1] : parts[0];
+  }
+  const set = (id, v) => { $(id).textContent = v; };
+
+  /* ---------- навигация ---------- */
+  const tabs = [...document.querySelectorAll("nav button[data-go]")];
+  tabs.forEach(b => b.addEventListener("click", () => {
+    tabs.forEach(x => x.setAttribute("aria-current", x === b));
+    document.querySelectorAll("main section").forEach(s => s.hidden = s.id !== b.dataset.go);
+    document.querySelector("main").scrollTop = 0;
+  }));
+  $("themeBtn").addEventListener("click", () => {
+    const now = document.documentElement.getAttribute("data-theme");
+    const dark = now ? now === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+
+  /* ---------- 01 концентрация ---------- */
+  let cGuard = false;
+  function concFrom(mgml, source){
+    if(cGuard) return; cGuard = true;
+    if(source !== "pct")   $("cInPct").value   = ok(mgml) ? +(mgml/10).toFixed(6) : "";
+    if(source !== "mg")    $("cInMg").value    = ok(mgml) ? +mgml.toFixed(6) : "";
+    if(source !== "ratio") $("cInRatio").value = ok(mgml) && mgml > 0 ? +(1000/mgml).toFixed(4) : "";
+    cGuard = false;
+    const vol = val("cInVol");
+    $("cOut").innerHTML = (ok(mgml) ? fmt(mgml) : "—") + '<small>мг/мл</small>';
+    set("cPct", ok(mgml) ? fmt(mgml/10) + " %" : "—");
+    set("cRatio", ok(mgml) && mgml > 0 ? "1:" + fmt(1000/mgml, 0) : "—");
+    set("cVial", ok(mgml) && ok(vol) ? fmt(mgml*vol) + " мг" : "—");
+    set("cMcg", ok(mgml) ? fmt(mgml*1000, 0) : "—");
+  }
+  $("cInPct").addEventListener("input", () => concFrom(val("cInPct")*10, "pct"));
+  $("cInMg").addEventListener("input", () => concFrom(val("cInMg"), "mg"));
+  $("cInRatio").addEventListener("input", () => concFrom(1000/val("cInRatio"), "ratio"));
+  $("cInVol").addEventListener("input", () => concFrom(val("cInMg"), "vol"));
+
+  /* ---------- 02 доза ---------- */
+  function doseCalc(){
+    const w = val("dW"), v = val("dVal"), freq = Math.max(1, val("dFreq") || 1);
+    const unit = $("dUnit").value;
+    let single = NaN;                              // разовая доза в мг
+    if(unit === "mgkg")    single = v * w;
+    if(unit === "mcgkg")   single = v * w / 1000;
+    if(unit === "mg")      single = v;
+    if(unit === "mcg")     single = v / 1000;
+    if(unit === "mgkgday") single = v * w / freq;
+    const daily = single * freq;
+    let conc = val("dConc");
+    if($("dConcMode").value === "pct") conc *= 10;
+    const ampVol = val("dAmpVol");
+    const volume = single / conc;
+    set("dSingle", ok(single) ? fmt(single) + " мг" : "—");
+    set("dDaily",  ok(daily)  ? fmt(daily)  + " мг" : "—");
+    $("dVol").innerHTML = (ok(volume) ? fmt(volume, volume < 1 ? 2 : 1) : "—") + '<small>мл</small>';
+    set("dAmp",  ok(volume) && ok(ampVol) ? fmt(volume/ampVol, 2) : "—");
+    set("dAmpD", ok(volume) && ok(ampVol) ? fmt(volume*freq/ampVol, 2) : "—");
+
+    const max = val("dMax"), warn = $("dWarn");
+    const msgs = [];
+    if(ok(max) && ok(daily) && daily > max)
+      msgs.push("Суточная доза " + fmt(daily) + " мг превышает заданный максимум " + fmt(max) + " мг.");
+    if(ok(volume) && volume > 20)
+      msgs.push("Объём " + fmt(volume) + " мл велик для одной внутримышечной инъекции — проверьте путь введения.");
+    if(ok(volume) && volume > 0 && volume < 0.1)
+      msgs.push("Объём меньше 0,1 мл — точно отмерить обычным шприцем нельзя, нужно разведение.");
+    warn.hidden = msgs.length === 0;
+    warn.textContent = msgs.join(" ");
+  }
+  ["dW","dVal","dUnit","dFreq","dConcMode","dConc","dAmpVol","dMax"]
+    .forEach(id => $(id).addEventListener("input", doseCalc));
+
+  /* ---------- 03 МЕ ---------- */
+  function iuVial(){
+    const c = val("uConc"), d = val("uDose");
+    const vol = d / c;
+    $("uVol").innerHTML = (ok(vol) ? fmt(vol, vol < 1 ? 2 : 1) : "—") + '<small>мл</small>';
+    set("uTicks", ok(vol) ? fmt(vol*100, 0) : "—");
+    set("uPerMl", ok(c) ? fmt(c, 0) + " МЕ" : "—");
+  }
+  $("uPreset").addEventListener("change", () => {
+    const v = $("uPreset").value;
+    if(v !== "custom"){ $("uConc").value = v; iuVial(); }
+  });
+  ["uConc","uDose"].forEach(id => $(id).addEventListener("input", iuVial));
+
+  let mGuard = false;
+  function massFrom(source){
+    if(mGuard) return; mGuard = true;
+    const f = val("mFactor");                       // мкг в 1 МЕ
+    if(source === "iu")   $("mMass").value = ok(val("mIU"))   ? +(val("mIU")*f).toFixed(6) : "";
+    if(source === "mass") $("mIU").value   = ok(val("mMass")) ? +(val("mMass")/f).toFixed(4) : "";
+    if(source === "factor") $("mMass").value = ok(val("mIU")) ? +(val("mIU")*f).toFixed(6) : "";
+    mGuard = false;
+    $("mEcho").textContent = ok(f) && f > 0
+      ? "В 1 мг содержится " + fmt(1000/f, 0) + " МЕ. В 1 МЕ — " + fmt(f, 4) + " мкг."
+      : "Укажите коэффициент.";
+  }
+  $("mPreset").addEventListener("change", () => {
+    const v = $("mPreset").value;
+    if(v !== "customM"){ $("mFactor").value = v; massFrom("factor"); }
+  });
+  $("mIU").addEventListener("input", () => massFrom("iu"));
+  $("mMass").addEventListener("input", () => massFrom("mass"));
+  $("mFactor").addEventListener("input", () => massFrom("factor"));
+
+  /* ---------- 04 разведение ---------- */
+  function dilute(){
+    const c1 = val("c1"), v1 = val("v1"), c2 = val("c2"), v2 = val("v2");
+    const known = [c1,v1,c2,v2].filter(ok).length;
+    const out = $("dilOut");
+    if(known < 3){ out.textContent = "Заполните три поля из четырёх"; out.style.fontSize = "17px";
+      set("dilTake","—"); set("dilSolv","—"); set("dilTotal","—"); return; }
+    out.style.fontSize = "";
+    let C1=c1, V1=v1, C2=c2, V2=v2, label="";
+    if(!ok(V1)){ V1 = C2*V2/C1; label = "V₁ = " + fmt(V1,2) + " мл"; }
+    else if(!ok(V2)){ V2 = C1*V1/C2; label = "V₂ = " + fmt(V2,2) + " мл"; }
+    else if(!ok(C2)){ C2 = C1*V1/V2; label = "C₂ = " + fmt(C2,3); }
+    else if(!ok(C1)){ C1 = C2*V2/V1; label = "C₁ = " + fmt(C1,3); }
+    else { label = "Все поля заполнены"; }
+    out.innerHTML = label;
+    const solvent = V2 - V1;
+    set("dilTake", fmt(V1,2) + " мл");
+    set("dilSolv", solvent >= 0 ? fmt(solvent,2) + " мл" : "невозможно");
+    set("dilTotal", fmt(V2,2) + " мл");
+    if(solvent < 0){
+      $("dilSolv").classList.add("bad");
+    } else $("dilSolv").classList.remove("bad");
+  }
+  ["c1","v1","c2","v2"].forEach(id => $(id).addEventListener("input", dilute));
+
+  /* ---------- 05 инфузия ---------- */
+  function infusion(){
+    const w = val("iW"), d = val("iDose"), conc = val("iConc");
+    let mgh = NaN;                                  // мг вещества в час
+    const u = $("iDoseUnit").value;
+    if(u === "mcgkgmin") mgh = d * w * 60 / 1000;
+    if(u === "mcgkgh")   mgh = d * w / 1000;
+    if(u === "mgkgh")    mgh = d * w;
+    const rate = mgh / conc;
+    $("iRate").innerHTML = (ok(rate) ? fmt(rate, 2) : "—") + '<small>мл/ч</small>';
+    set("iMin", ok(rate) ? fmt(rate/60, 3) + " мл" : "—");
+    set("iMgh", ok(mgh) ? fmt(mgh) + " мг" : "—");
+    set("iMgd", ok(mgh) ? fmt(mgh*24) + " мг" : "—");
+  }
+  ["iW","iDose","iDoseUnit","iConc"].forEach(id => $(id).addEventListener("input", infusion));
+
+  function drops(){
+    const v = val("gVol"), t = val("gTime"), f = parseFloat($("gFactor").value);
+    const dpm = v * f / t;
+    $("gDrops").innerHTML = (ok(dpm) ? fmt(dpm, 0) : "—") + '<small>кап/мин</small>';
+    set("gRate", ok(v) && ok(t) ? fmt(v*60/t) + " мл/ч" : "—");
+    set("gEvery", ok(dpm) && dpm > 0 ? fmt(60/dpm, 1) + " с" : "—");
+  }
+  ["gVol","gTime","gFactor"].forEach(id => $(id).addEventListener("input", drops));
+
+  /* ---------- 06 дети ---------- */
+  function ped(){
+    const w = val("pW"), h = val("pH");
+    const bsa = Math.sqrt(w*h/3600);                // Мостеллер
+    $("pBsa").innerHTML = (ok(bsa) ? fmt(bsa, 2) : "—") + '<small>м²</small>';
+    let rate = NaN;                                 // правило 4-2-1
+    if(ok(w)){
+      rate = w <= 10 ? w*4 : w <= 20 ? 40 + (w-10)*2 : 60 + (w-20)*1;
+    }
+    set("pRate", ok(rate) ? fmt(rate, 0) + " мл/ч" : "—");
+    set("pDay",  ok(rate) ? fmt(rate*24, 0) + " мл" : "—");
+    set("pBmi",  ok(w) && ok(h) ? fmt(w/Math.pow(h/100, 2), 1) : "—");
+    const dose = val("pDose")*bsa, conc = val("pConc");
+    $("pOut").textContent = ok(dose)
+      ? "Разовая доза: " + fmt(dose) + " мг" + (ok(conc) ? " — это " + fmt(dose/conc, 2) + " мл." : ".")
+      : "Укажите дозу.";
+  }
+  ["pW","pH","pDose","pConc"].forEach(id => $(id).addEventListener("input", ped));
+
+  /* ---------- 07 рецепт ---------- */
+  const FORMS = {
+    sol:  {pre:"Sol.",  pack:"in ampullis", dtd:true},
+    inf:  {pre:"Sol.",  pack:"in flac.",    dtd:true},
+    tab:  {pre:"Tab.",  pack:"",            dtd:true},
+    caps: {pre:"Caps.", pack:"in caps.",    dtd:true},
+    susp: {pre:"Susp.", pack:"in flac.",    dtd:false},
+    ung:  {pre:"Ung.",  pack:"",            dtd:false},
+    supp: {pre:"Supp.", pack:"",            dtd:true}
+  };
+  const saved = [];
+
+  function ruDate(iso){
+    if(!iso) return "";
+    const [y,m,d] = iso.split("-");
+    return d + "." + m + "." + y;
+  }
+  function rxBlock(){
+    const f = FORMS[$("rForm").value];
+    const drug = $("rDrug").value.trim() || "—";
+    const strength = $("rStrength").value.trim();
+    const vol = $("rVol").value.trim();
+    const n = $("rN").value.trim();
+    const sig = $("rSig").value.trim();
+    const rep = $("rRepeat").value;
+
+    let line = "Rp.:  " + f.pre + " " + drug;
+    if(strength) line += " " + strength;
+    if(vol) line += " - " + vol;
+    const body = [line];
+    if(f.dtd && n) body.push("      D.t.d. N. " + n + (f.pack ? " " + f.pack : ""));
+    else if(vol && !f.dtd) body.push("      D.S.");
+    if(f.dtd) body.push("      S.  " + sig);
+    else body.push("      " + sig);
+    if(rep) body.push("      " + rep);
+    return body.join("\n");
+  }
+
+  function buildRx(){
+    const head = [];
+    const name = $("rName").value.trim(), age = $("rAge").value.trim();
+    if(name) head.push("Пациент: " + name + (age ? ", " + age : ""));
+    const dx = $("rDx").value.trim();
+    if(dx) head.push("Диагноз: " + dx);
+    const dt = ruDate($("rDate").value);
+    if(dt) head.push("Дата: " + dt);
+
+    const foot = [];
+    const doc = $("rDoc").value.trim();
+    if(doc) foot.push("Врач: " + doc + "   ______________ (подпись, печать)");
+
+    const blocks = saved.concat([rxBlock()]).join("\n\n");
+    $("rxOut").textContent = [head.join("\n"), "", blocks, "", foot.join("\n")]
+      .join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  ["rName","rAge","rDate","rDoc","rDx","rForm","rDrug","rStrength","rVol","rN","rRepeat","rSig"]
+    .forEach(id => $(id).addEventListener("input", buildRx));
+
+  $("rxAdd").addEventListener("click", () => {
+    saved.push(rxBlock());
+    $("rxMsg").textContent = "Прописей в бланке: " + (saved.length + 1) + ". Заполните поля для следующей.";
+    buildRx();
+  });
+  $("rxCopy").addEventListener("click", async () => {
+    try{
+      await navigator.clipboard.writeText($("rxOut").textContent);
+      $("rxMsg").textContent = "Рецепт скопирован.";
+    }catch(e){
+      $("rxMsg").textContent = "Скопировать не удалось — выделите текст вручную.";
+    }
+    setTimeout(() => $("rxMsg").textContent = "", 2500);
+  });
+  $("rxPrint").addEventListener("click", () => window.print());
+
+  /* ---------- старт ---------- */
+  $("rDate").value = new Date().toISOString().slice(0,10);
+  concFrom(10, "init"); doseCalc(); iuVial(); massFrom("factor");
+  dilute(); infusion(); drops(); ped(); buildRx();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "name": "dozator",
+  "productName": "Дозатор",
+  "version": "1.0.0",
+  "description": "Калькулятор концентраций, доз, МЕ и генератор рецептов для врачей",
+  "main": "main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.medcalc.dozator",
+    "productName": "Dozator",
+    "files": [
+      "main.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Дозатор"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Science"
+    }
+  }
+}
